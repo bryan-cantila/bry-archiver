@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bry-archiver"
+version = "1.0.0"
+description = "Cross-platform CLI compression tool producing .bry archives"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Bryan A. Cantila" }]
+requires-python = ">=3.9"
+keywords = ["compression", "archive", "cli", "bry"]
+
+[project.scripts]
+bry = "bry.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["bry*"]
