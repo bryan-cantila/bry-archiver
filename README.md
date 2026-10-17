@@ -5,7 +5,7 @@
 *Created by devuvo*
 
 [![Tests](https://github.com/bryan-cantila/bry-archiver/actions/workflows/tests.yml/badge.svg)](https://github.com/bryan-cantila/bry-archiver/actions)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: devuvo Community](https://img.shields.io/badge/license-devuvo_Community-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
 [![Version](https://img.shields.io/badge/version-1.0.0-lightgrey.svg)](pyproject.toml)
 
@@ -84,4 +84,4 @@ Original format and implementation, designed for this project. Built with an AI-
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Bryan A. Cantila.
+**Free to use — just credit devuvo.** Personal, educational, and non-commercial use is free, provided you give visible credit (e.g. "Created by devuvo" with a link to https://www.devuvo.com). Using it for business or income-generating purposes? Notify devuvo first at admin@devuvo.com. See [LICENSE](LICENSE) for the full terms.
