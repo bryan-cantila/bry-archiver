@@ -1,5 +1,6 @@
 # bry-archiver
 
+[![Tests](https://github.com/bryan-cantila/bry-archiver/actions/workflows/tests.yml/badge.svg)](https://github.com/bryan-cantila/bry-archiver/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
 [![Version](https://img.shields.io/badge/version-1.0.0-lightgrey.svg)](pyproject.toml)
