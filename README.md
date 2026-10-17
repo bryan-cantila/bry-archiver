@@ -1,5 +1,9 @@
 # bry-archiver
 
+![bry-archiver logo](docs/logo.png)
+
+*Created by devuvo*
+
 [![Tests](https://github.com/bryan-cantila/bry-archiver/actions/workflows/tests.yml/badge.svg)](https://github.com/bryan-cantila/bry-archiver/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
@@ -23,6 +27,11 @@ backup.bry: OK
 $ bry unpack backup.bry -d restored/
 unpacked 248 entries -> /home/user/restored
 ```
+
+## Demo
+
+![bry pack, list and verify](docs/demo-pack.png)
+![bry help and unpack](docs/demo-help.png)
 
 ## Features
 
