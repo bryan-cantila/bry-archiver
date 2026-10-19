@@ -7,7 +7,7 @@
 [![Tests](https://github.com/bryan-cantila/bry-archiver/actions/workflows/tests.yml/badge.svg)](https://github.com/bryan-cantila/bry-archiver/actions)
 [![License: devuvo Community](https://img.shields.io/badge/license-devuvo_Community-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
-[![Version](https://img.shields.io/badge/version-1.0.0-lightgrey.svg)](pyproject.toml)
+[![Version](https://img.shields.io/badge/version-2.0.0-lightgrey.svg)](pyproject.toml)
 
 A cross-platform command-line compression tool that creates `.bry` archives.
 
@@ -35,7 +35,8 @@ unpacked 248 entries -> /home/user/restored
 
 ## Features
 
-- **`.bry` format** — an original archive format: magic-byte identification, per-file CRC32 integrity checks, zlib compression (levels 1–9)
+- **`.bry` format v2** — a solid archive: all files share one LZMA compression stream, so redundancy *across* files is squeezed out too (the trick RAR/7-Zip use to beat ZIP). Per-file CRC32 integrity checks, documented in [FORMAT.md](FORMAT.md)
+- **Backward compatible** — v1 archives (per-file zlib) still list, verify, and unpack fine
 - **Cross-platform** — pure Python standard library, runs on Windows, macOS, and Linux with Python 3.9+
 - **Four commands** — `pack`, `unpack`, `list`, `verify`; nothing else to learn
 - **Safe extraction** — entries that try to escape the destination directory are rejected
@@ -76,7 +77,7 @@ bry verify archive.bry
 
 ## Format
 
-`.bry` is a documented binary format — see [FORMAT.md](FORMAT.md) for the exact field layout. Readers reject files without the `BRY\x01` magic bytes, and any CRC or size mismatch names the corrupt file.
+`.bry` is a documented binary format — see [FORMAT.md](FORMAT.md) for the exact field layout. v2 uses a solid LZMA stream; readers reject files without the `BRY\x02` (or legacy `BRY\x01`) magic bytes, and any CRC or size mismatch names the corrupt file.
 
 ## Development notes
 
