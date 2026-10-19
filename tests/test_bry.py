@@ -20,22 +20,62 @@ def make_tree(root):
         fh.write("unicode filename round-trip\n")
 
 
-def corrupt_one_byte(path):
-    """Flip one byte inside the file entry's compressed payload.
-
-    Archive layout here: file header (9) + dir entry (11 + name) +
-    file entry header (11) + name + comp_data. Walk it properly.
-    """
+def _v2_index_end(path):
+    """Return the file offset where the v2 solid compressed stream starts."""
     with open(path, "rb") as fh:
-        raw = bytearray(fh.read())
-    off = 9  # skip file header
-    name_len = struct.unpack(">H", raw[off:off + 2])[0]
-    off += 30 + name_len  # skip directory entry header (30) + name (no payload)
-    name_len = struct.unpack(">H", raw[off:off + 2])[0]
-    comp_off = off + 30 + name_len
-    raw[comp_off] ^= 0xFF
+        raw = fh.read()
+    assert raw[:4] == b"BRY\x02", "expected a v2 archive"
+    count = struct.unpack(">I", raw[6:10])[0]
+    off = 10  # magic(4) + flags(1) + method(1) + file_count(4)
+    for _ in range(count):
+        name_len = struct.unpack(">H", raw[off:off + 2])[0]
+        off += 30 + name_len  # entry meta (30) + name
+    return raw, off
+
+
+def corrupt_stream_byte(path):
+    """Flip one byte inside the v2 solid compressed stream."""
+    raw, stream_off = _v2_index_end(path)
+    raw = bytearray(raw)
+    # stay clear of the 13-byte LZMA ALONE header; hit the coded data
+    pos = stream_off + 13 + (len(raw) - stream_off - 13) // 2
+    raw[pos] ^= 0xFF
     with open(path, "wb") as fh:
         fh.write(bytes(raw))
+
+
+def corrupt_crc_byte(path):
+    """Flip one byte of the first *file* entry's stored CRC32 (v2 index)."""
+    raw, _stream_off = _v2_index_end(path)
+    raw = bytearray(raw)
+    count = struct.unpack(">I", raw[6:10])[0]
+    off = 10
+    for _ in range(count):
+        name_len = struct.unpack(">H", raw[off:off + 2])[0]
+        name = raw[off + 30:off + 30 + name_len].decode("utf-8")
+        if not name.endswith("/"):  # first real file entry
+            crc_off = off + 2 + 8 + 8  # name_len + orig_size + offset
+            raw[crc_off] ^= 0xFF
+            break
+        off += 30 + name_len
+    with open(path, "wb") as fh:
+        fh.write(bytes(raw))
+
+
+def pack_v1(files, out):
+    """Minimal v1 writer (BRY\\x01, per-file zlib) for backward-compat tests."""
+    import zlib
+    names = sorted(files)
+    with open(out, "wb") as fh:
+        fh.write(struct.pack(">4sBI", b"BRY\x01", 0, len(names)))
+        for name in names:
+            data = files[name]
+            comp = zlib.compress(data, 6)
+            crc = zlib.crc32(data) & 0xFFFFFFFF
+            nb = name.encode("utf-8")
+            fh.write(struct.pack(">HQQIq", len(nb), len(data), len(comp), crc, 0))
+            fh.write(nb)
+            fh.write(comp)
 
 
 class TestRoundTrip(unittest.TestCase):
@@ -97,7 +137,7 @@ class TestRoundTrip(unittest.TestCase):
     def test_magic_bytes(self):
         bf.pack([self.src], self.arc)
         with open(self.arc, "rb") as fh:
-            self.assertEqual(fh.read(4), b"BRY\x01")
+            self.assertEqual(fh.read(4), b"BRY\x02")
 
     def test_level_1_and_9_round_trip(self):
         for level in (1, 9):
@@ -145,17 +185,22 @@ class TestCorruption(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_corrupt_byte_fails_verify_naming_file(self):
-        corrupt_one_byte(self.arc)
+    def test_corrupt_stream_byte_fails_verify(self):
+        corrupt_stream_byte(self.arc)
+        problems = bf.verify(self.arc)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("solid data stream", problems[0])
+
+    def test_corrupt_stream_byte_fails_unpack(self):
+        corrupt_stream_byte(self.arc)
+        with self.assertRaises(bf.CorruptArchive):
+            bf.unpack(self.arc, os.path.join(self.tmp, "dest"))
+
+    def test_corrupt_crc_byte_names_file(self):
+        corrupt_crc_byte(self.arc)
         problems = bf.verify(self.arc)
         self.assertEqual(len(problems), 1)
         self.assertIn("victim.txt", problems[0])
-
-    def test_corrupt_byte_fails_unpack_naming_file(self):
-        corrupt_one_byte(self.arc)
-        with self.assertRaises(bf.CorruptArchive) as ctx:
-            bf.unpack(self.arc, os.path.join(self.tmp, "dest"))
-        self.assertIn("victim.txt", str(ctx.exception))
 
     def test_wrong_magic_rejected(self):
         bad = os.path.join(self.tmp, "bad.bry")
@@ -209,6 +254,75 @@ class TestCLI(unittest.TestCase):
     def test_cli_pack_missing_input_fails(self):
         self.assertEqual(
             cli.main(["pack", os.path.join(self.tmp, "nope"), "-o", self.arc]), 1)
+
+
+class TestV1BackwardCompat(unittest.TestCase):
+    """v1 archives (per-file zlib) must remain listable/verifiable/unpackable."""
+
+    def setUp(self):
+        self.tmp = os.path.abspath("v1compat_tmp_%s" % self._testMethodName)
+        os.makedirs(self.tmp, exist_ok=True)
+        self.arc = os.path.join(self.tmp, "old.bry")
+        self.files = {
+            "readme.txt": b"hello v1\n" * 20,
+            "sub/data.bin": bytes(range(256)) * 10,
+            "empty.txt": b"",
+        }
+        pack_v1(self.files, self.arc)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_v1_list(self):
+        names = sorted(e.name for e in bf.list_entries(self.arc))
+        self.assertEqual(names, sorted(self.files))
+
+    def test_v1_verify_clean(self):
+        self.assertEqual(bf.verify(self.arc), [])
+
+    def test_v1_unpack_round_trip(self):
+        dest = os.path.join(self.tmp, "dest")
+        n = bf.unpack(self.arc, dest)
+        self.assertEqual(n, len(self.files))
+        for name, data in self.files.items():
+            with open(os.path.join(dest, *name.split("/")), "rb") as fh:
+                self.assertEqual(fh.read(), data)
+
+
+class TestV2Compression(unittest.TestCase):
+    """v2 (solid LZMA) must beat v1 (per-file zlib) on redundant data."""
+
+    def setUp(self):
+        self.tmp = os.path.abspath("v2comp_tmp_%s" % self._testMethodName)
+        os.makedirs(self.tmp, exist_ok=True)
+        self.src = os.path.join(self.tmp, "src")
+        os.makedirs(self.src)
+        chunk = ("the quick brown fox jumps over the lazy dog. " * 40 + "\n").encode()
+        for i in range(40):
+            with open(os.path.join(self.src, "file_%02d.txt" % i), "wb") as fh:
+                fh.write(chunk)
+                fh.write(("file number %d\n" % i).encode() * 50)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_v2_smaller_than_v1_on_redundant_data(self):
+        files = {}
+        for dirpath, _dirs, fns in os.walk(self.src):
+            for fn in fns:
+                full = os.path.join(dirpath, fn)
+                with open(full, "rb") as fh:
+                    files[os.path.relpath(full, self.src).replace(os.sep, "/")] = fh.read()
+        v1arc = os.path.join(self.tmp, "v1.bry")
+        pack_v1(files, v1arc)
+        v2arc = os.path.join(self.tmp, "v2.bry")
+        bf.pack([self.src], v2arc, level=6)
+        v1size = os.path.getsize(v1arc)
+        v2size = os.path.getsize(v2arc)
+        self.assertLess(v2size, v1size,
+                        "v2 (%d) should beat v1 (%d) on redundant data" % (v2size, v1size))
 
 
 if __name__ == "__main__":

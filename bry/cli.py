@@ -77,7 +77,8 @@ def build_parser():
     pp.add_argument("paths", nargs="+", help="files/directories to archive")
     pp.add_argument("-o", "--output", required=True, help="output .bry file")
     pp.add_argument("--level", type=int, default=6, choices=range(1, 10),
-                    metavar="1-9", help="zlib compression level (default 6)")
+                    metavar="1-9",
+                    help="compression level 1-9 (default 6; higher is smaller but slower)")
     pp.set_defaults(func=cmd_pack)
 
     up = sub.add_parser("unpack", help="extract a .bry archive")
